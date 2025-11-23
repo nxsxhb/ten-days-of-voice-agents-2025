@@ -1,9 +1,12 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import { useRoomContext } from '@livekit/components-react';
+import OrderPreview from '@/components/app/order-preview';
 import { motion } from 'motion/react';
 import type { AppConfig } from '@/app-config';
 import { ChatTranscript } from '@/components/app/chat-transcript';
+import { Receipt } from '@/components/app/receipt';
 import { PreConnectMessage } from '@/components/app/preconnect-message';
 import { TileLayout } from '@/components/app/tile-layout';
 import {
@@ -36,7 +39,7 @@ const BOTTOM_VIEW_MOTION_PROPS = {
   transition: {
     duration: 0.3,
     delay: 0.5,
-    ease: 'easeOut',
+    ease: 'easeOut' as const,
   },
 };
 
@@ -68,9 +71,11 @@ export const SessionView = ({
 }: React.ComponentProps<'section'> & SessionViewProps) => {
   useConnectionTimeout(200_000);
   useDebugMode({ enabled: IN_DEVELOPMENT });
+  const room = useRoomContext();
 
   const messages = useChatMessages();
   const [chatOpen, setChatOpen] = useState(false);
+  const [liveOrder, setLiveOrder] = useState<any>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   const controls: ControlBarControls = {
@@ -90,8 +95,29 @@ export const SessionView = ({
     }
   }, [messages]);
 
+  // Subscribe to live order updates
+  useEffect(() => {
+    const handleData = (payload: Uint8Array, participant: any, kind?: any, topic?: string) => {
+      if (topic === 'order_update') {
+        try {
+          const decoder = new TextDecoder();
+          const data = JSON.parse(decoder.decode(payload));
+          setLiveOrder(data);
+        } catch (e) {
+          console.error('Failed to parse order update', e);
+        }
+      }
+    };
+    room.on('dataReceived', handleData);
+    return () => {
+      room.off('dataReceived', handleData);
+    };
+  }, [room]);
+
   return (
     <section className="bg-background relative z-10 h-full w-full overflow-hidden" {...props}>
+      {liveOrder && <OrderPreview order={liveOrder} />}
+        <Receipt />
       {/* Chat Transcript */}
       <div
         className={cn(
